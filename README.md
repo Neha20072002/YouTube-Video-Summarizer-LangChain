@@ -13,6 +13,10 @@ This project loads transcripts from YouTube (or text from any URL), then prompts
 - Hugging Face-hosted LLM via `HuggingFaceEndpoint` (default: `mistralai/Mistral-7B-Instruct-v0.3`)
 - Streamlit UI for quick use—no notebooks needed
 - Basic input validation and error handling
+- **🆕 Persistent History**: Save and manage all your summaries in a local SQLite database
+- **🆕 Export Functionality**: Export summaries in multiple formats (Markdown, JSON, CSV)
+- **🆕 Search & Filter**: Find previous summaries by URL, title, or content
+- **🆕 History Management**: View, delete, and organize your summary collection
 
 ---
 
@@ -53,6 +57,36 @@ Then click "Summarize".
 
 ---
 
+## 📚 History & Export Features
+
+### Persistent Storage
+All summaries are automatically saved to a local SQLite database (`summaries.db`) with the following information:
+- URL and title
+- Summary text and metadata
+- Creation timestamp
+- Video duration and channel (for YouTube videos)
+- Model used and settings
+
+### History Management
+- **View History**: Access all previous summaries through the sidebar
+- **Search**: Find summaries by URL, title, or content
+- **Delete**: Remove individual summaries or clear all history
+- **Recent Preview**: See your latest summaries in the sidebar
+
+### Export Options
+Export your summaries in multiple formats:
+- **Markdown**: Clean, formatted summaries with metadata
+- **JSON**: Structured data for programmatic use
+- **CSV**: Tabular format for analysis and spreadsheets
+
+All exports include:
+- Summary text and metadata
+- Creation timestamps
+- Video information (when available)
+- Word counts and settings
+
+---
+
 ## How it works
 - The app detects if the provided URL is from YouTube. If so, it uses `YoutubeLoader` to fetch the transcript and metadata. Otherwise, it uses `UnstructuredURLLoader` to fetch and parse the page content.
 - A concise summarization prompt (~300 words) is built with `PromptTemplate`.
@@ -83,11 +117,13 @@ Key modules involved are in `app.py`:
 ---
 
 ## Roadmap
+- ✅ ~~Persistent history and export (Markdown/JSON/CSV)~~ **COMPLETED**
 - Add chunking and map-reduce summarization for very long texts
 - Adjustable summary length and tone in the UI
 - Optional local models via `llama.cpp`/`OLLAMA` or HF Transformers
-- Persistent history and export (Markdown/JSON)
 - Basic tests for loaders and prompt assembly
+- Advanced search filters (date range, video duration, etc.)
+- Summary sharing and collaboration features
 
 ---
 
