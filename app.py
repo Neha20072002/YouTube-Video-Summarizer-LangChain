@@ -6,6 +6,9 @@ from langchain_groq import ChatGroq
 from langchain.chains.summarize import load_summarize_chain
 from langchain_community.document_loaders import YoutubeLoader,UnstructuredURLLoader
 from langchain_huggingface import HuggingFaceEndpoint
+from database import SummaryDatabase, ExportManager
+import os
+from datetime import datetime
 
 
 def is_youtube_url(url):
@@ -39,6 +42,115 @@ def validate_and_fix_url(url):
     return url, None
 
 
+def display_history_interface():
+    """Display the history interface"""
+    st.subheader("📚 Summary History")
+    
+    # Initialize database
+    db = SummaryDatabase()
+    
+    # Search functionality
+    search_query = st.text_input("🔍 Search summaries", placeholder="Search by URL, title, or content...")
+    
+    # Get summaries based on search
+    if search_query:
+        summaries = db.search_summaries(search_query)
+        st.info(f"Found {len(summaries)} summaries matching '{search_query}'")
+    else:
+        summaries = db.get_all_summaries()
+    
+    if not summaries:
+        st.info("No summaries found. Create your first summary to see it here!")
+        return
+    
+    # Display summaries
+    for summary in summaries:
+        id, url, title, summary_text, summary_length, summary_tone, model_used, created_at, word_count, video_duration, video_channel = summary
+        
+        with st.expander(f"📄 {title or 'Untitled'} - {created_at[:10]}"):
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.write(f"**URL:** [{url}]({url})")
+                st.write(f"**Date:** {created_at}")
+                st.write(f"**Length:** {summary_length} | **Tone:** {summary_tone}")
+                st.write(f"**Word Count:** {word_count}")
+                if video_duration:
+                    st.write(f"**Duration:** {video_duration}")
+                if video_channel:
+                    st.write(f"**Channel:** {video_channel}")
+            
+            with col2:
+                if st.button("🗑️ Delete", key=f"delete_{id}"):
+                    if db.delete_summary(id):
+                        st.success("Summary deleted!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete summary")
+            
+            st.write("**Summary:**")
+            st.write(summary_text)
+
+
+def export_summaries():
+    """Handle export functionality"""
+    st.subheader("📥 Export Summaries")
+    
+    db = SummaryDatabase()
+    summaries = db.get_all_summaries()
+    
+    if not summaries:
+        st.warning("No summaries available for export.")
+        return
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📄 Export as Markdown"):
+            markdown_content = ExportManager.export_to_markdown(summaries)
+            success, filepath = ExportManager.save_export_file(markdown_content, "summaries", "md")
+            if success:
+                st.success(f"✅ Exported to {filepath}")
+                st.download_button(
+                    label="📥 Download Markdown",
+                    data=markdown_content,
+                    file_name=f"summaries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown"
+                )
+            else:
+                st.error("Failed to export Markdown")
+    
+    with col2:
+        if st.button("📊 Export as JSON"):
+            json_content = ExportManager.export_to_json(summaries)
+            success, filepath = ExportManager.save_export_file(json_content, "summaries", "json")
+            if success:
+                st.success(f"✅ Exported to {filepath}")
+                st.download_button(
+                    label="📥 Download JSON",
+                    data=json_content,
+                    file_name=f"summaries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+            else:
+                st.error("Failed to export JSON")
+    
+    with col3:
+        if st.button("📈 Export as CSV"):
+            csv_content = ExportManager.export_to_csv(summaries)
+            success, filepath = ExportManager.save_export_file(csv_content, "summaries", "csv")
+            if success:
+                st.success(f"✅ Exported to {filepath}")
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv_content,
+                    file_name=f"summaries_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.error("Failed to export CSV")
+
+
 ## streamlit APP
 st.set_page_config(page_title="LangChain: Summarize Text From YouTube", page_icon="🦜")
 st.title("📺Summarize Text From YouTube Video Using LangChain 🐦")
@@ -49,6 +161,54 @@ st.subheader('Summarize URL')
 ## Get the Groq API Key and url(YT or website)to be summarized
 with st.sidebar:
     hf_api_key=st.text_input("Huggingface API Token",value="",type="password")
+    
+    # History and Export Section
+    st.divider()
+    st.subheader("📚 History & Export")
+    
+    # Initialize database for stats
+    db = SummaryDatabase()
+    summary_count = db.get_summary_count()
+    
+    if summary_count > 0:
+        st.info(f"📊 Total summaries: {summary_count}")
+        
+        # Recent summaries preview
+        recent_summaries = db.get_recent_summaries(3)
+        if recent_summaries:
+            st.write("**Recent summaries:**")
+            for summary in recent_summaries:
+                id, url, title, summary_text, summary_length, summary_tone, model_used, created_at, word_count, video_duration, video_channel = summary
+                st.write(f"• {title or 'Untitled'} ({created_at[:10]})")
+    else:
+        st.info("No summaries yet. Create your first one!")
+    
+    # Navigation buttons
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📚 View History", use_container_width=True):
+            st.session_state.show_history = True
+            st.session_state.show_export = False
+    
+    with col2:
+        if st.button("📥 Export", use_container_width=True):
+            st.session_state.show_export = True
+            st.session_state.show_history = False
+    
+    # Clear all button
+    if summary_count > 0:
+        if st.button("🗑️ Clear All History", use_container_width=True):
+            if st.session_state.get('confirm_clear', False):
+                if db.clear_all_summaries():
+                    st.success("All summaries cleared!")
+                    st.session_state.confirm_clear = False
+                    st.rerun()
+                else:
+                    st.error("Failed to clear summaries")
+            else:
+                st.session_state.confirm_clear = True
+                st.warning("Click again to confirm clearing all history")
 
 # URL input with helper text
 generic_url = st.text_input(
@@ -62,6 +222,15 @@ st.caption("💡 **Examples:**")
 st.caption("• YouTube: `https://www.youtube.com/watch?v=dQw4w9WgXcQ`")
 st.caption("• YouTube Short: `https://youtu.be/dQw4w9WgXcQ`")
 st.caption("• Web page: `https://example.com/article`")
+
+# Handle different views
+if st.session_state.get('show_history', False):
+    display_history_interface()
+elif st.session_state.get('show_export', False):
+    export_summaries()
+else:
+    # Main summarization interface
+    st.write("Enter a URL above to get started with summarization!")
 
 ## Gemma Model USsing Groq API
 ##llm =ChatGroq(model="Gemma-7b-It", groq_api_key=groq_api_key)
@@ -95,7 +264,7 @@ if st.button("Summarize"):
             generic_url = validated_url
             
             try:
-                with st.spinner("Waiting..."):
+                with st.spinner("Loading and processing content..."):
                     ## loading the website or yt video data
                     if is_youtube_url(generic_url):
                         loader = YoutubeLoader.from_youtube_url(generic_url, add_video_info=True)
@@ -111,6 +280,45 @@ if st.button("Summarize"):
                     chain = load_summarize_chain(llm, chain_type="stuff", prompt=prompt)
                     output_summary = chain.run(docs)
 
-                    st.success(output_summary)
+                    # Display the summary
+                    st.success("Summary generated successfully!")
+                    st.write(output_summary)
+                    
+                    # Save to database
+                    db = SummaryDatabase()
+                    
+                    # Extract metadata
+                    title = "Untitled"
+                    video_duration = None
+                    video_channel = None
+                    
+                    if is_youtube_url(generic_url) and docs:
+                        # Try to extract video metadata
+                        try:
+                            if hasattr(docs[0], 'metadata'):
+                                metadata = docs[0].metadata
+                                title = metadata.get('title', 'Untitled')
+                                video_duration = metadata.get('length', None)
+                                video_channel = metadata.get('author', None)
+                        except:
+                            pass
+                    
+                    # Save summary to database
+                    success = db.save_summary(
+                        url=generic_url,
+                        title=title,
+                        summary_text=output_summary,
+                        summary_length="Medium (200-300 words)",
+                        summary_tone="Professional",
+                        model_used=repo_id,
+                        video_duration=video_duration,
+                        video_channel=video_channel
+                    )
+                    
+                    if success:
+                        st.info("✅ Summary saved to history!")
+                    else:
+                        st.warning("⚠️ Summary generated but failed to save to history")
+                        
             except Exception as e:
                 st.exception(f"Exception: {e}")
