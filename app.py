@@ -162,6 +162,40 @@ st.subheader('Summarize URL')
 with st.sidebar:
     hf_api_key=st.text_input("Huggingface API Token",value="",type="password")
     
+    # Summary Length Controls
+    st.divider()
+    st.subheader("📏 Summary Length")
+    
+    # Length category selection
+    length_category = st.selectbox(
+        "Choose length category:",
+        ["Short (100-150 words)", "Medium (200-300 words)", "Long (400-500 words)", "Custom"],
+        index=1  # Default to Medium
+    )
+    
+    # Custom word count slider (only shown when Custom is selected)
+    if length_category == "Custom":
+        custom_word_count = st.slider(
+            "Custom word count:",
+            min_value=50,
+            max_value=1000,
+            value=300,
+            step=25,
+            help="Select between 50-1000 words"
+        )
+        word_count = custom_word_count
+    else:
+        # Extract word count from category
+        if "Short" in length_category:
+            word_count = 125  # Average of 100-150
+        elif "Medium" in length_category:
+            word_count = 250  # Average of 200-300
+        elif "Long" in length_category:
+            word_count = 450  # Average of 400-500
+    
+    # Display selected word count
+    st.info(f"📊 Target: ~{word_count} words")
+    
     # History and Export Section
     st.divider()
     st.subheader("📚 History & Export")
@@ -237,10 +271,26 @@ else:
 repo_id="mistralai/Mistral-7B-Instruct-v0.3"
 llm=HuggingFaceEndpoint(repo_id=repo_id,max_length=150,temperature=0.7,token=hf_api_key)
 
-prompt_template="""
-Provide a summary of the following content in 300 words:
-Content:{text}
+# Validation function for word count
+def validate_word_count(word_count):
+    """Validate and cap word count to reasonable limits"""
+    if word_count < 50:
+        return 50
+    elif word_count > 1000:
+        return 1000
+    return word_count
 
+# Validate the word count
+validated_word_count = validate_word_count(word_count)
+
+# Create dynamic prompt template
+prompt_template=f"""
+Provide a comprehensive summary of the following content in approximately {validated_word_count} words. 
+Make sure the summary is well-structured and covers the key points:
+
+Content: {{text}}
+
+Summary:
 """
 prompt=PromptTemplate(template=prompt_template,input_variables=["text"])
 
@@ -308,7 +358,7 @@ if st.button("Summarize"):
                         url=generic_url,
                         title=title,
                         summary_text=output_summary,
-                        summary_length="Medium (200-300 words)",
+                        summary_length=length_category,
                         summary_tone="Professional",
                         model_used=repo_id,
                         video_duration=video_duration,
